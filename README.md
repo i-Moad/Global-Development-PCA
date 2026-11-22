@@ -1,5 +1,5 @@
 
-# Global Development Through Data
+# Global Development PCA
 
 A small Python data science project exploring socioeconomic indicators using Principal Component Analysis (PCA) and K-means clustering.
 
