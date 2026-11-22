@@ -2,9 +2,9 @@ import matplotlib
 
 matplotlib.use("Agg")
 
-import matplotlib.pyplot as plt
-import pandas as pd
 import pytest
+import pandas as pd
+import matplotlib.pyplot as plt
 
 
 from global_pca.analysis import calculate_descriptive_statistics
@@ -12,6 +12,7 @@ from global_pca.analysis import plot_indicator_distributions
 from global_pca.analysis import calculate_correlation_matrix
 from global_pca.analysis import plot_correlation_matrix
 from global_pca.analysis import detect_outliers
+from global_pca.analysis import plot_cluster_scatter
 
 
 def test_calculate_descriptive_statistics():
@@ -206,3 +207,108 @@ def test_reject_missing_values_in_outlier_detection():
 
   with pytest.raises(ValueError):
     detect_outliers(data, ["GDP"])
+
+
+def test_plot_cluster_scatter():
+  scores = pd.DataFrame(
+    {
+      "PC1": [1.0, 3.0, -1.0, -3.0],
+      "PC2": [2.0, 4.0, -2.0, -4.0],
+    },
+    index=["A", "B", "C", "D"],
+  )
+
+  assignments = pd.Series(
+    [0, 0, 1, 1],
+    index=scores.index,
+  )
+
+  fig, ax = plot_cluster_scatter(scores, assignments)
+
+  assert ax.get_xlabel() == "PC1"
+  assert ax.get_ylabel() == "PC2"
+  assert ax.get_title() == "K-Means Clusters in PCA Space"
+
+  # Two collections per cluster: points and centroid
+  assert len(ax.collections) == 4
+
+  plt.close(fig)
+
+
+def test_plot_cluster_scatter_centroids():
+  scores = pd.DataFrame(
+    {
+      "PC1": [1.0, 3.0, -1.0, -3.0],
+      "PC2": [2.0, 4.0, -2.0, -4.0],
+    },
+    index=["A", "B", "C", "D"],
+  )
+
+  assignments = pd.Series(
+    [0, 0, 1, 1],
+    index=scores.index,
+  )
+
+  fig, ax = plot_cluster_scatter(scores, assignments)
+
+  # Cluster 0 centroid should be (2, 3)
+  centroid_0 = ax.collections[1].get_offsets()[0]
+
+  assert centroid_0[0] == pytest.approx(2.0)
+  assert centroid_0[1] == pytest.approx(3.0)
+
+  # Cluster 1 centroid should be (-2, -3)
+  centroid_1 = ax.collections[3].get_offsets()[0]
+
+  assert centroid_1[0] == pytest.approx(-2.0)
+  assert centroid_1[1] == pytest.approx(-3.0)
+
+  plt.close(fig)
+
+
+def test_plot_cluster_scatter_rejects_empty_scores():
+  scores = pd.DataFrame(columns=["PC1", "PC2"])
+  assignments = pd.Series(dtype=int)
+
+  with pytest.raises(ValueError, match="empty"):
+    plot_cluster_scatter(scores, assignments)
+
+
+def test_plot_cluster_scatter_rejects_missing_components():
+  scores = pd.DataFrame({"PC1": [1.0, 2.0, 3.0]})
+  assignments = pd.Series([0, 0, 1])
+
+  with pytest.raises(ValueError, match="Missing component"):
+    plot_cluster_scatter(scores, assignments)
+
+
+def test_plot_cluster_scatter_rejects_mismatched_indexes():
+  scores = pd.DataFrame(
+    {
+      "PC1": [1.0, 2.0, 3.0],
+      "PC2": [4.0, 5.0, 6.0],
+    },
+    index=["A", "B", "C"],
+  )
+
+  assignments = pd.Series(
+    [0, 0, 1],
+    index=["X", "Y", "Z"],
+  )
+
+  with pytest.raises(ValueError, match="identical indexes"):
+    plot_cluster_scatter(scores, assignments)
+
+
+def test_plot_cluster_scatter_rejects_non_finite_scores():
+  scores = pd.DataFrame(
+    {
+      "PC1": [1.0, float("nan"), 3.0],
+      "PC2": [4.0, 5.0, 6.0],
+    }
+  )
+
+  assignments = pd.Series([0, 0, 1])
+
+  with pytest.raises(ValueError, match="finite values"):
+    plot_cluster_scatter(scores, assignments)

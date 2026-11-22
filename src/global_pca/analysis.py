@@ -1,10 +1,12 @@
 from collections.abc import Sequence
 from math import ceil
 
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
 from matplotlib.figure import Figure
+from matplotlib.axes import Axes
 
 from global_pca.data.pipeline import START_YEAR, END_YEAR
 
@@ -358,3 +360,111 @@ def detect_outliers(
       "upper_bound",
     ],
   )
+
+def plot_cluster_scatter(
+    scores: pd.DataFrame,
+    assignments: pd.Series,
+    component_columns: tuple[str, str] = ("PC1", "PC2"),
+    cluster_names: dict[int, str] | None = None,
+) -> tuple[Figure, Axes]:
+  """
+  Visualize K-Means clusters and their centroids in PCA space.
+  """
+
+  if scores.empty:
+    raise ValueError(
+      "Scores cannot be empty."
+    )
+
+  if len(component_columns) != 2:
+    raise ValueError(
+      "Exactly two components must be provided."
+    )
+
+  if len(set(component_columns)) != 2:
+    raise ValueError(
+      "Component columns must be unique."
+    )
+
+  missing_columns = set(component_columns) - set(scores.columns)
+
+  if missing_columns:
+    raise ValueError(
+      f"Missing component columns: {sorted(missing_columns)}"
+    )
+
+  if not isinstance(assignments, pd.Series):
+    raise TypeError(
+      "Assignments must be a pandas Series."
+    )
+
+  if not scores.index.equals(assignments.index):
+    raise ValueError(
+      "Scores and assignments must have identical indexes."
+    )
+
+  if assignments.isna().any():
+    raise ValueError(
+      "Assignments cannot contain missing values."
+    )
+
+  selected_scores = scores.loc[:, list(component_columns)]
+
+  if not all(
+      pd.api.types.is_numeric_dtype(dtype)
+      for dtype in selected_scores.dtypes
+  ):
+    raise TypeError(
+      "Component scores must be numeric."
+    )
+
+  if not np.isfinite(selected_scores.to_numpy()).all():
+    raise ValueError(
+      "Component scores must contain finite values."
+    )
+
+  fig, ax = plt.subplots(figsize=(10, 7))
+
+  for cluster in sorted(assignments.unique()):
+    mask = assignments == cluster
+    cluster_scores = selected_scores.loc[mask]
+
+    name = (
+      cluster_names.get(cluster, f"Cluster {cluster}")
+      if cluster_names is not None
+      else f"Cluster {cluster}"
+    )
+
+    ax.scatter(
+      cluster_scores[component_columns[0]],
+      cluster_scores[component_columns[1]],
+      label=name,
+      alpha=0.75,
+      s=55,
+    )
+
+    centroid = cluster_scores.mean()
+
+    ax.scatter(
+      centroid[component_columns[0]],
+      centroid[component_columns[1]],
+      marker="X",
+      s=180,
+      edgecolors="black",
+      linewidths=1,
+      label=f"{name} centroid",
+    )
+
+  ax.set_xlabel(component_columns[0])
+  ax.set_ylabel(component_columns[1])
+  ax.set_title("K-Means Clusters in PCA Space")
+
+  ax.axhline(0, linewidth=0.7, linestyle="--", alpha=0.5)
+  ax.axvline(0, linewidth=0.7, linestyle="--", alpha=0.5)
+
+  ax.legend()
+  ax.grid(alpha=0.2)
+
+  fig.tight_layout()
+
+  return fig, ax
